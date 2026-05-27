@@ -21,6 +21,10 @@ data.json
 # Exclude macOS Finder (System Explorer) View States
 .DS_Store
 
+# local deploy config
+.env
+.env.local
+
 # local skills / agent files
 skills/
 agents/
