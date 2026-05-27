@@ -1,16 +1,10 @@
 import { MarkdownView } from "obsidian";
 import { getActiveDocumentLine, resolveActiveHeadingForLevels } from "../navigation/activeHeading";
 import { jumpToHeading } from "../navigation/jumpToHeading";
-import { filterHeadingsByLevels, type HeadingLevel, parseHeadings, type ParsedHeading } from "../parsing/headings";
+import { type HeadingLevel, parseHeadings, type ParsedHeading } from "../parsing/headings";
 import { getEnabledFloatingOutlineLevels } from "../settings/settings";
 import type QuickHeadingPalettePlugin from "../main";
-
-interface RenderedOutlineNode {
-	heading: ParsedHeading;
-	itemEl: HTMLLIElement;
-	linkEl: HTMLAnchorElement;
-	contextualListEl: HTMLUListElement | null;
-}
+import { renderOutline, type RenderedOutlineNode } from "./renderOutline";
 
 export class FloatingOutlineController {
 	private readonly plugin: QuickHeadingPalettePlugin;
@@ -20,7 +14,6 @@ export class FloatingOutlineController {
 	private activeLeafContainer: HTMLElement | null = null;
 	private resizeObserver: ResizeObserver | null = null;
 	private allHeadings: ParsedHeading[] = [];
-	private renderedHeadings: ParsedHeading[] = [];
 	private enabledLevels = new Set<HeadingLevel>();
 	private linkByHeadingId = new Map<string, HTMLAnchorElement>();
 	private nodeByHeadingId = new Map<string, RenderedOutlineNode>();
@@ -64,7 +57,6 @@ export class FloatingOutlineController {
 		this.activeView = null;
 		this.activeLeafContainer = null;
 		this.allHeadings = [];
-		this.renderedHeadings = [];
 		this.enabledLevels.clear();
 		this.linkByHeadingId.clear();
 		this.nodeByHeadingId.clear();
@@ -97,7 +89,7 @@ export class FloatingOutlineController {
 		if (!activeView || !activeView.editor) {
 			this.allHeadings = [];
 			this.enabledLevels = new Set<HeadingLevel>();
-			this.renderList([]);
+			this.doRender();
 			this.updateActiveHeading();
 			this.applyVisibility();
 			return;
@@ -105,10 +97,42 @@ export class FloatingOutlineController {
 
 		this.allHeadings = parseHeadings(activeView.editor.getValue());
 		this.enabledLevels = getEnabledFloatingOutlineLevels(this.plugin.settings);
-		const filtered = filterHeadingsByLevels(this.allHeadings, this.enabledLevels);
-		this.renderList(filtered);
+		this.doRender();
 		this.updateActiveHeading();
 		this.applyVisibility();
+	}
+
+	private doRender(): void {
+		if (!this.listEl) {
+			return;
+		}
+
+		const previousActiveHeadingId = this.activeHeadingId;
+		this.expandedHeadingId = null;
+		this.contextualActiveHeadingId = null;
+
+		const onHeadingClick = (heading: ParsedHeading): void => {
+			if (this.activeView) {
+				void jumpToHeading(this.plugin.app, this.activeView, heading);
+			}
+		};
+
+		const maps = renderOutline(this.listEl, this.allHeadings, this.enabledLevels, onHeadingClick);
+		this.linkByHeadingId = maps.linkByHeadingId;
+		this.nodeByHeadingId = maps.nodeByHeadingId;
+		this.contextualLinkByHeadingId = maps.contextualLinkByHeadingId;
+
+		if (this.allHeadings.length === 0) {
+			this.activeHeadingId = null;
+			return;
+		}
+
+		if (previousActiveHeadingId && this.linkByHeadingId.has(previousActiveHeadingId)) {
+			this.activeHeadingId = previousActiveHeadingId;
+			this.linkByHeadingId.get(previousActiveHeadingId)?.classList.add("is-active");
+		} else {
+			this.activeHeadingId = null;
+		}
 	}
 
 	applyVisibility(): void {
@@ -124,88 +148,6 @@ export class FloatingOutlineController {
 		const shouldHide = !enabled || !hasValidMarkdownView || !hasVisibleItems || belowBreakpoint || hasUnsafeLayout;
 
 		this.rootEl.classList.toggle("is-hidden", shouldHide);
-	}
-
-	renderList(headings: ParsedHeading[]): void {
-		if (!this.listEl) {
-			return;
-		}
-
-		const previousActiveHeadingId = this.activeHeadingId;
-		this.listEl.replaceChildren();
-		this.renderedHeadings = headings;
-		this.linkByHeadingId.clear();
-		this.nodeByHeadingId.clear();
-		this.contextualLinkByHeadingId.clear();
-		this.expandedHeadingId = null;
-		this.contextualActiveHeadingId = null;
-		if (headings.length === 0) {
-			this.activeHeadingId = null;
-			return;
-		}
-
-		const firstLevel = headings[0]?.level ?? 1;
-		const levelStack: Array<{ level: number; list: HTMLUListElement; lastItem: HTMLLIElement | null }> = [
-			{ level: firstLevel, list: this.listEl, lastItem: null },
-		];
-
-		for (const heading of headings) {
-			while (levelStack.length > 1 && heading.level < levelStack[levelStack.length - 1]!.level) {
-				levelStack.pop();
-			}
-
-			let target = levelStack[levelStack.length - 1]!;
-			if (heading.level < target.level && levelStack.length === 1) {
-				target.level = heading.level;
-			}
-
-			while (target.level < heading.level) {
-				if (!target.lastItem) {
-					break;
-				}
-				const nestedList = document.createElement("ul");
-				target.lastItem.appendChild(nestedList);
-				target = { level: target.level + 1, list: nestedList, lastItem: null };
-				levelStack.push(target);
-			}
-
-			const li = document.createElement("li");
-			const link = document.createElement("a");
-			link.className = "outline-plus-floating-outline__link";
-			link.dataset.headingId = heading.id;
-			link.href = "#";
-			link.textContent = heading.text;
-			link.title = heading.text;
-			link.addEventListener("click", (event) => {
-				event.preventDefault();
-				if (!this.activeView) {
-					return;
-				}
-				void jumpToHeading(this.plugin.app, this.activeView, heading);
-			});
-
-			li.appendChild(link);
-			this.linkByHeadingId.set(heading.id, link);
-			this.nodeByHeadingId.set(heading.id, {
-				heading,
-				itemEl: li,
-				linkEl: link,
-				contextualListEl: null,
-			});
-			target.list.appendChild(li);
-			target.lastItem = li;
-		}
-
-		if (previousActiveHeadingId) {
-			const previousActiveLink = this.linkByHeadingId.get(previousActiveHeadingId);
-			if (previousActiveLink) {
-				this.activeHeadingId = previousActiveHeadingId;
-				previousActiveLink.classList.add("is-active");
-				return;
-			}
-		}
-
-		this.activeHeadingId = null;
 	}
 
 	private getActiveMarkdownView(): MarkdownView | null {
@@ -401,75 +343,20 @@ export class FloatingOutlineController {
 
 	private toggleContextualList(headingId: string, expanded: boolean): void {
 		const node = this.nodeByHeadingId.get(headingId);
-		if (!node) {
-			return;
-		}
-
-		const contextualList = this.ensureContextualList(node);
-		if (!contextualList) {
+		if (!node?.contextualListEl) {
 			return;
 		}
 
 		node.itemEl.classList.toggle("is-expanded", expanded);
-		contextualList.classList.toggle("is-expanded", expanded);
-		contextualList.setAttribute("aria-hidden", expanded ? "false" : "true");
-	}
-
-	private ensureContextualList(node: RenderedOutlineNode): HTMLUListElement | null {
-		if (node.contextualListEl) {
-			return node.contextualListEl;
-		}
-
-		const children = this.getDirectHiddenChildren(node.heading);
-		if (children.length === 0) {
-			return null;
-		}
-
-		const list = document.createElement("ul");
-		list.className = "outline-plus-floating-outline__contextual-list";
-		list.setAttribute("aria-hidden", "true");
-
-		for (const child of children) {
-			const item = document.createElement("li");
-			item.className = "outline-plus-floating-outline__contextual-item";
-
-			const link = document.createElement("a");
-			link.className = "outline-plus-floating-outline__link outline-plus-floating-outline__link--contextual";
-			link.dataset.headingId = child.id;
-			link.href = "#";
-			link.textContent = child.text;
-			link.title = child.text;
-			link.addEventListener("click", (event) => {
-				event.preventDefault();
-				if (!this.activeView) {
-					return;
-				}
-				void jumpToHeading(this.plugin.app, this.activeView, child);
-			});
-
-			item.appendChild(link);
-			list.appendChild(item);
-			this.contextualLinkByHeadingId.set(child.id, link);
-		}
-
-		node.itemEl.appendChild(list);
-		node.contextualListEl = list;
-		return list;
+		node.contextualListEl.classList.toggle("is-expanded", expanded);
+		node.contextualListEl.setAttribute("aria-hidden", expanded ? "false" : "true");
 	}
 
 	private getExpandableHeading(activeHeading: ParsedHeading): ParsedHeading | null {
 		const visibleChain = this.getVisibleHeadingChain(activeHeading);
 		for (const candidate of visibleChain) {
-			if (candidate.level >= 6) {
-				continue;
-			}
-
-			const directChildLevel = (candidate.level + 1) as HeadingLevel;
-			if (this.enabledLevels.has(directChildLevel)) {
-				continue;
-			}
-
-			if (this.getDirectHiddenChildren(candidate).length > 0) {
+			const node = this.nodeByHeadingId.get(candidate.id);
+			if (node?.contextualListEl) {
 				return candidate;
 			}
 		}
@@ -499,40 +386,6 @@ export class FloatingOutlineController {
 		}
 
 		return chain;
-	}
-
-	private getDirectHiddenChildren(parent: ParsedHeading): ParsedHeading[] {
-		if (parent.level >= 6) {
-			return [];
-		}
-
-		const childLevel = (parent.level + 1) as HeadingLevel;
-		if (this.enabledLevels.has(childLevel)) {
-			return [];
-		}
-
-		const parentIndex = this.allHeadings.findIndex((heading) => heading.id === parent.id);
-		if (parentIndex < 0) {
-			return [];
-		}
-
-		const children: ParsedHeading[] = [];
-		for (let index = parentIndex + 1; index < this.allHeadings.length; index += 1) {
-			const candidate = this.allHeadings[index];
-			if (!candidate) {
-				continue;
-			}
-
-			if (candidate.level <= parent.level) {
-				break;
-			}
-
-			if (candidate.level === childLevel) {
-				children.push(candidate);
-			}
-		}
-
-		return children;
 	}
 
 	private applyContextualActiveHeading(heading: ParsedHeading | null): void {
