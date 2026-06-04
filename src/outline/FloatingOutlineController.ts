@@ -23,6 +23,7 @@ export class FloatingOutlineController {
 	private contextualActiveHeadingId: string | null = null;
 	private sourceScrollEl: HTMLElement | null = null;
 	private previewScrollEl: HTMLElement | null = null;
+	private lastRenderedSignature = "";
 
 	private readonly onTrackedScroll = (): void => {
 		this.updateActiveHeading();
@@ -64,6 +65,7 @@ export class FloatingOutlineController {
 		this.activeHeadingId = null;
 		this.expandedHeadingId = null;
 		this.contextualActiveHeadingId = null;
+		this.lastRenderedSignature = "";
 
 		if (this.rootEl) {
 			this.rootEl.remove();
@@ -89,7 +91,7 @@ export class FloatingOutlineController {
 		if (!activeView || !activeView.editor) {
 			this.allHeadings = [];
 			this.enabledLevels = new Set<HeadingLevel>();
-			this.doRender();
+			this.renderIfChanged();
 			this.updateActiveHeading();
 			this.applyVisibility();
 			return;
@@ -97,9 +99,24 @@ export class FloatingOutlineController {
 
 		this.allHeadings = parseHeadings(activeView.editor.getValue());
 		this.enabledLevels = getEnabledFloatingOutlineLevels(this.plugin.settings);
-		this.doRender();
+		this.renderIfChanged();
 		this.updateActiveHeading();
 		this.applyVisibility();
+	}
+
+	private renderIfChanged(): void {
+		const signature = this.computeRenderSignature();
+		if (signature === this.lastRenderedSignature) {
+			return;
+		}
+		this.lastRenderedSignature = signature;
+		this.doRender();
+	}
+
+	private computeRenderSignature(): string {
+		const levels = Array.from(this.enabledLevels).sort().join(",");
+		const headings = this.allHeadings.map((h) => `${h.id}:${h.level}:${h.text}`).join("|");
+		return `${levels}::${headings}`;
 	}
 
 	private doRender(): void {

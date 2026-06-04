@@ -92,8 +92,9 @@ function makeHeading(
 	offset: number,
 	idCounts: Map<string, number>,
 ): ParsedHeading {
-	// Keep IDs stable while typing heading text on the same line.
-	const baseId = `h${level}-l${line}`;
+	// Derive IDs from text+level (not line) so inserting/removing lines elsewhere
+	// in the document does not invalidate IDs of unrelated headings.
+	const baseId = `h${level}-${slugifyHeadingText(text)}`;
 	const seenCount = (idCounts.get(baseId) ?? 0) + 1;
 	idCounts.set(baseId, seenCount);
 
@@ -107,6 +108,14 @@ function makeHeading(
 		offset,
 		matchText: normalizeQuery(text),
 	};
+}
+
+function slugifyHeadingText(text: string): string {
+	const slug = text
+		.toLocaleLowerCase()
+		.replace(/[^\p{Letter}\p{Number}]+/gu, "-")
+		.replace(/^-+|-+$/g, "");
+	return slug || "x";
 }
 
 function computeLineStarts(content: string, lineCount: number): number[] {
