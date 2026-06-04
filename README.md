@@ -28,3 +28,23 @@ Until this plugin is available in the official plugins menu, install it manually
 - Run `npm run build`
 - Copy `main.js`, `manifest.json`, and `styles.css` to `<Vault>/.obsidian/plugins/outline-plus/`
 - Reload Obsidian and enable **Outline Plus** in **Settings -> Community plugins**
+
+## Development
+
+```sh
+npm install
+npm run dev      # esbuild in watch mode
+npm run deploy   # build + copy main.js/manifest.json/styles.css into your vault
+npm test         # vitest
+npm run lint     # eslint
+```
+
+Set `OBSIDIAN_VAULT_PLUGIN_DIR` (env or `.env`) to your vault's plugin folder for `deploy`.
+
+## Release
+
+```sh
+npm version <patch|minor|major>
+```
+
+Builds, bumps manifests, tags, pushes, and creates the GitHub release via `gh`.
