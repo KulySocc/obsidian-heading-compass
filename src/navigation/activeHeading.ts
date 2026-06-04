@@ -132,6 +132,73 @@ function getActiveLineFromCursor(view: MarkdownView): number | null {
 	return cursor?.line ?? null;
 }
 
+export function getVisibleHeadingChain(
+	headings: ParsedHeading[],
+	activeHeading: ParsedHeading,
+	enabledLevels: Set<HeadingLevel>,
+): ParsedHeading[] {
+	const chain: ParsedHeading[] = [];
+	let targetLevel = activeHeading.level;
+
+	for (let index = headings.findIndex((h) => h.id === activeHeading.id); index >= 0; index -= 1) {
+		const candidate = headings[index];
+		if (!candidate || candidate.level > targetLevel) {
+			continue;
+		}
+
+		if (candidate.id === activeHeading.id || candidate.level < targetLevel) {
+			targetLevel = candidate.level;
+			if (enabledLevels.has(candidate.level)) {
+				chain.push(candidate);
+			}
+			if (targetLevel === 1) {
+				break;
+			}
+		}
+	}
+
+	return chain;
+}
+
+export function findNearestContextualChild(
+	headings: ParsedHeading[],
+	heading: ParsedHeading,
+	enabledLevels: Set<HeadingLevel>,
+): ParsedHeading | null {
+	const startIndex = headings.findIndex((candidate) => candidate.id === heading.id);
+	if (startIndex < 0) {
+		return null;
+	}
+
+	for (let index = startIndex; index >= 0; index -= 1) {
+		const candidate = headings[index];
+		if (!candidate || candidate.level > heading.level) {
+			continue;
+		}
+
+		if (
+			!enabledLevels.has(candidate.level) &&
+			candidate.level > 1 &&
+			enabledLevels.has((candidate.level - 1) as HeadingLevel)
+		) {
+			return candidate;
+		}
+	}
+
+	return null;
+}
+
+export function findHeadingForLine(headings: ParsedHeading[], activeLine: number): ParsedHeading | null {
+	let result: ParsedHeading | null = null;
+	for (const heading of headings) {
+		if (heading.line > activeLine) {
+			break;
+		}
+		result = heading;
+	}
+	return result;
+}
+
 function findActiveHeadingIndex(headings: ParsedHeading[], activeLine: number): number {
 	let activeIndex = 0;
 	for (let index = 0; index < headings.length; index += 1) {

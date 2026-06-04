@@ -1,5 +1,11 @@
 import { MarkdownView } from "obsidian";
-import { getActiveDocumentLine, resolveActiveHeadingForLevels } from "../navigation/activeHeading";
+import {
+	findHeadingForLine,
+	findNearestContextualChild,
+	getActiveDocumentLine,
+	getVisibleHeadingChain,
+	resolveActiveHeadingForLevels,
+} from "../navigation/activeHeading";
 import { jumpToHeading } from "../navigation/jumpToHeading";
 import { type HeadingLevel, parseHeadings, type ParsedHeading } from "../parsing/headings";
 import { getEnabledFloatingOutlineLevels } from "../settings/settings";
@@ -292,7 +298,7 @@ export class FloatingOutlineController {
 		const activeHeading = activeLine === null
 			? null
 			: resolveActiveHeadingForLevels(this.allHeadings, activeLine, this.enabledLevels);
-		const rawActiveHeading = activeLine === null ? null : this.findHeadingForLine(activeLine);
+		const rawActiveHeading = activeLine === null ? null : findHeadingForLine(this.allHeadings, activeLine);
 		this.applyActiveHeading(activeHeading);
 		this.applyContextualActiveHeading(rawActiveHeading);
 	}
@@ -370,7 +376,7 @@ export class FloatingOutlineController {
 	}
 
 	private getExpandableHeading(activeHeading: ParsedHeading): ParsedHeading | null {
-		const visibleChain = this.getVisibleHeadingChain(activeHeading);
+		const visibleChain = getVisibleHeadingChain(this.allHeadings, activeHeading, this.enabledLevels);
 		for (const candidate of visibleChain) {
 			const node = this.nodeByHeadingId.get(candidate.id);
 			if (node?.contextualListEl) {
@@ -381,32 +387,8 @@ export class FloatingOutlineController {
 		return null;
 	}
 
-	private getVisibleHeadingChain(activeHeading: ParsedHeading): ParsedHeading[] {
-		const chain: ParsedHeading[] = [];
-		let targetLevel = activeHeading.level;
-
-		for (let index = this.allHeadings.findIndex((heading) => heading.id === activeHeading.id); index >= 0; index -= 1) {
-			const candidate = this.allHeadings[index];
-			if (!candidate || candidate.level > targetLevel) {
-				continue;
-			}
-
-			if (candidate.id === activeHeading.id || candidate.level < targetLevel) {
-				targetLevel = candidate.level;
-				if (this.enabledLevels.has(candidate.level)) {
-					chain.push(candidate);
-				}
-				if (targetLevel === 1) {
-					break;
-				}
-			}
-		}
-
-		return chain;
-	}
-
 	private applyContextualActiveHeading(heading: ParsedHeading | null): void {
-		const nextHeading = heading ? this.findNearestContextualHeading(heading) : null;
+		const nextHeading = heading ? findNearestContextualChild(this.allHeadings, heading, this.enabledLevels) : null;
 		const nextId = nextHeading?.id ?? null;
 		if (this.contextualActiveHeadingId === nextId) {
 			if (nextId) {
@@ -425,42 +407,6 @@ export class FloatingOutlineController {
 		}
 
 		this.contextualLinkByHeadingId.get(nextId)?.classList.add("is-contextual-active");
-	}
-
-	private findHeadingForLine(activeLine: number): ParsedHeading | null {
-		let activeHeading: ParsedHeading | null = null;
-		for (const heading of this.allHeadings) {
-			if (heading.line > activeLine) {
-				break;
-			}
-			activeHeading = heading;
-		}
-
-		return activeHeading;
-	}
-
-	private findNearestContextualHeading(heading: ParsedHeading): ParsedHeading | null {
-		const startIndex = this.allHeadings.findIndex((candidate) => candidate.id === heading.id);
-		if (startIndex < 0) {
-			return null;
-		}
-
-		for (let index = startIndex; index >= 0; index -= 1) {
-			const candidate = this.allHeadings[index];
-			if (!candidate) {
-				continue;
-			}
-
-			if (candidate.level > heading.level) {
-				continue;
-			}
-
-			if (this.contextualLinkByHeadingId.has(candidate.id)) {
-				return candidate;
-			}
-		}
-
-		return null;
 	}
 
 	private isOutlineVisible(): boolean {
