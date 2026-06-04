@@ -5,6 +5,7 @@ import { FloatingOutlineController } from "./outline/FloatingOutlineController";
 import { HeadingPaletteSettingTab } from "./settings/SettingsTab";
 import { DEFAULT_SETTINGS, type HeadingPaletteSettings } from "./settings/settings";
 import { HeadingPaletteModal } from "./ui/HeadingPaletteModal";
+import { applyPendingSourceNavigationOnModeSwitch } from "./navigation/jumpToHeading";
 
 export default class QuickHeadingPalettePlugin extends Plugin {
 	settings: HeadingPaletteSettings = { ...DEFAULT_SETTINGS };
@@ -23,7 +24,13 @@ export default class QuickHeadingPalettePlugin extends Plugin {
 
 		this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.refreshFloatingOutline()));
 		this.registerEvent(this.app.workspace.on("file-open", () => this.refreshFloatingOutline()));
-		this.registerEvent(this.app.workspace.on("layout-change", () => this.refreshFloatingOutline()));
+		this.registerEvent(this.app.workspace.on("layout-change", () => {
+			const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+			if (activeView && activeView.getMode() === "source") {
+				applyPendingSourceNavigationOnModeSwitch(activeView);
+			}
+			this.refreshFloatingOutline();
+		}));
 		this.registerEvent(
 			this.app.workspace.on("editor-change", (_editor, view) => {
 				if (view !== this.app.workspace.getActiveViewOfType(MarkdownView)) {

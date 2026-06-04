@@ -6,7 +6,11 @@ const PREVIEW_FLASH_CLASS = "heading-palette-preview-flash";
 const SOURCE_FLASH_CLASS = "heading-palette-source-flash";
 const navigationTokenByView = new WeakMap<MarkdownView, number>();
 const recentSourceNavigationLineByView = new WeakMap<MarkdownView, { line: number; expiresAt: number }>();
+const pendingSourceNavigationLineByView = new WeakMap<MarkdownView, number>();
+const pendingSourceWatcherByView = new WeakMap<MarkdownView, number>();
 const RECENT_SOURCE_NAVIGATION_WINDOW_MS = 1200;
+const PENDING_WATCH_INTERVAL_MS = 50;
+const PENDING_WATCH_MAX_DURATION_MS = 300_000;
 
 export async function jumpToHeading(app: App, view: MarkdownView, item: ParsedHeading): Promise<void> {
 	const token = nextNavigationToken(view);
@@ -18,6 +22,7 @@ export async function jumpToHeading(app: App, view: MarkdownView, item: ParsedHe
 			return;
 		}
 		if (didUseNativeNavigation) {
+			setPendingSourceNavigation(view, item.line);
 			return;
 		}
 
@@ -26,12 +31,60 @@ export async function jumpToHeading(app: App, view: MarkdownView, item: ParsedHe
 			return;
 		}
 		if (didJump) {
+			setPendingSourceNavigation(view, item.line);
 			return;
 		}
 	}
 
 	navigateInSource(view, item.line);
 	flashSourceHeading(view, item);
+}
+
+export function applyPendingSourceNavigationOnModeSwitch(view: MarkdownView): void {
+	consumePendingSourceNavigation(view);
+}
+
+function consumePendingSourceNavigation(view: MarkdownView): boolean {
+	const line = pendingSourceNavigationLineByView.get(view);
+	if (line === undefined) {
+		return false;
+	}
+	pendingSourceNavigationLineByView.delete(view);
+	stopPendingSourceWatcher(view);
+	navigateInSource(view, line);
+	return true;
+}
+
+function stopPendingSourceWatcher(view: MarkdownView): void {
+	const intervalId = pendingSourceWatcherByView.get(view);
+	if (intervalId !== undefined) {
+		window.clearInterval(intervalId);
+		pendingSourceWatcherByView.delete(view);
+	}
+}
+
+function startPendingSourceWatcher(view: MarkdownView): void {
+	stopPendingSourceWatcher(view);
+
+	const startedAt = Date.now();
+	const intervalId = window.setInterval(() => {
+		if (!view.containerEl.isConnected) {
+			stopPendingSourceWatcher(view);
+			pendingSourceNavigationLineByView.delete(view);
+			return;
+		}
+
+		if (Date.now() - startedAt > PENDING_WATCH_MAX_DURATION_MS) {
+			stopPendingSourceWatcher(view);
+			return;
+		}
+
+		if (view.getMode() === "source") {
+			consumePendingSourceNavigation(view);
+		}
+	}, PENDING_WATCH_INTERVAL_MS);
+
+	pendingSourceWatcherByView.set(view, intervalId);
 }
 
 export function getRecentSourceNavigationLine(view: MarkdownView): number | null {
@@ -46,6 +99,11 @@ export function getRecentSourceNavigationLine(view: MarkdownView): number | null
 	}
 
 	return entry.line;
+}
+
+function setPendingSourceNavigation(view: MarkdownView, line: number): void {
+	pendingSourceNavigationLineByView.set(view, line);
+	startPendingSourceWatcher(view);
 }
 
 async function navigateInPreviewViaNativeLink(
