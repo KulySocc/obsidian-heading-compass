@@ -16,18 +16,19 @@ Fast heading navigation for Obsidian with two complementary UIs:
 - Frontmatter and fenced code blocks are ignored while parsing headings
 - Keyboard navigation in palette (`ArrowUp/Down`, `Option+Arrow`, `Cmd+Arrow`, `Enter`)
 
-## Planned Features
-
-- No additional planned features are documented yet.
-
 ## Installation
 
-Until this plugin is available in the official plugins menu, install it manually:
+### From Community plugins
 
-- Run `npm install`
-- Run `npm run build`
-- Copy `main.js`, `manifest.json`, and `styles.css` to `<Vault>/.obsidian/plugins/outline-plus/`
-- Reload Obsidian and enable **Outline Plus** in **Settings -> Community plugins**
+1. Open **Settings → Community plugins** and turn off Restricted mode
+2. Select **Browse**, search for **Outline Plus**, and install it
+3. Enable **Outline Plus**
+
+### Manual installation
+
+1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/KulySocc/obsidian-outline-plus/releases/latest)
+2. Copy them into `<Vault>/.obsidian/plugins/outline-plus/`
+3. Reload Obsidian and enable **Outline Plus** in **Settings → Community plugins**
 
 ## Development
 
