@@ -1,4 +1,4 @@
-# Outline Plus
+# Heading Compass
 
 Fast heading navigation for Obsidian with two complementary UIs:
 
@@ -21,14 +21,14 @@ Fast heading navigation for Obsidian with two complementary UIs:
 ### From Community plugins
 
 1. Open **Settings → Community plugins** and turn off Restricted mode
-2. Select **Browse**, search for **Outline Plus**, and install it
-3. Enable **Outline Plus**
+2. Select **Browse**, search for **Heading Compass**, and install it
+3. Enable **Heading Compass**
 
 ### Manual installation
 
-1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/KulySocc/obsidian-outline-plus/releases/latest)
-2. Copy them into `<Vault>/.obsidian/plugins/outline-plus/`
-3. Reload Obsidian and enable **Outline Plus** in **Settings → Community plugins**
+1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/KulySocc/obsidian-heading-compass/releases/latest)
+2. Copy them into `<Vault>/.obsidian/plugins/heading-compass/`
+3. Reload Obsidian and enable **Heading Compass** in **Settings → Community plugins**
 
 ## Development
 

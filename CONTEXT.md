@@ -1,4 +1,4 @@
-# Outline Plus
+# Heading Compass
 
 An Obsidian plugin for fast heading navigation. Provides two complementary UIs for jumping to headings in the active note.
 

@@ -18,7 +18,7 @@ async function resolveTargetDir() {
 	throw new Error(
 		"OBSIDIAN_VAULT_PLUGIN_DIR is not set.\n" +
 		"Set it in your shell or create a .env file:\n" +
-		"  OBSIDIAN_VAULT_PLUGIN_DIR=/path/to/your/vault/.obsidian/plugins/outline-plus",
+		"  OBSIDIAN_VAULT_PLUGIN_DIR=/path/to/your/vault/.obsidian/plugins/heading-compass",
 	);
 }
 
