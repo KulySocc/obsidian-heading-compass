@@ -51,14 +51,14 @@ export function renderOutline(
 			if (!target.lastItem) {
 				break;
 			}
-			const nestedList = document.createElement("ul");
+			const nestedList = activeDocument.createElement("ul");
 			target.lastItem.appendChild(nestedList);
 			target = { level: target.level + 1, list: nestedList, lastItem: null };
 			levelStack.push(target);
 		}
 
-		const li = document.createElement("li");
-		const link = document.createElement("a");
+		const li = activeDocument.createElement("li");
+		const link = activeDocument.createElement("a");
 		link.className = "outline-plus-floating-outline__link";
 		link.dataset.headingId = heading.id;
 		link.href = "#";
@@ -87,15 +87,15 @@ export function renderOutline(
 			continue;
 		}
 
-		const list = document.createElement("ul");
+		const list = activeDocument.createElement("ul");
 		list.className = "outline-plus-floating-outline__contextual-list";
 		list.setAttribute("aria-hidden", "true");
 
 		for (const child of children) {
-			const item = document.createElement("li");
+			const item = activeDocument.createElement("li");
 			item.className = "outline-plus-floating-outline__contextual-item";
 
-			const link = document.createElement("a");
+			const link = activeDocument.createElement("a");
 			link.className = "outline-plus-floating-outline__link outline-plus-floating-outline__link--contextual";
 			link.dataset.headingId = child.id;
 			link.href = "#";

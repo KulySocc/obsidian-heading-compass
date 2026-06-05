@@ -36,6 +36,10 @@ export class HeadingPaletteSettingTab extends PluginSettingTab {
 	}
 
 	display(): void {
+		this.render();
+	}
+
+	private render(): void {
 		const { containerEl } = this;
 		containerEl.empty();
 
@@ -118,8 +122,7 @@ export class HeadingPaletteSettingTab extends PluginSettingTab {
 						this.plugin.settings.floatingOutlineEnabled = value;
 						await this.plugin.saveSettings();
 						this.plugin.refreshFloatingOutline();
-						// eslint-disable-next-line @typescript-eslint/no-deprecated -- display() needed for Obsidian <1.13.0 compatibility
-						this.display();
+						this.render();
 					}),
 			);
 

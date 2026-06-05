@@ -6,7 +6,7 @@ export interface SegmentedControlProps {
 }
 
 export function createSegmentedControl(_props: SegmentedControlProps): HTMLElement {
-	const wrapper = document.createElement("div");
+	const wrapper = activeDocument.createElement("div");
 	wrapper.className = "heading-palette__segmented-control heading-palette__segmented-control--placeholder";
 	wrapper.setAttribute("aria-hidden", "true");
 	return wrapper;

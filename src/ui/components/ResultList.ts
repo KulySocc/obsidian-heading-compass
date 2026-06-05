@@ -11,7 +11,7 @@ export function renderResultList(containerEl: HTMLElement, rows: ResultListRow[]
 	clearElement(containerEl);
 
 	for (const row of rows) {
-		const item = document.createElement("button");
+		const item = activeDocument.createElement("button");
 		item.type = "button";
 		item.className = "heading-palette__item";
 		if (row.isSelected) {
@@ -20,14 +20,14 @@ export function renderResultList(containerEl: HTMLElement, rows: ResultListRow[]
 		item.setAttribute("data-heading-id", row.heading.id);
 		item.setAttribute("data-heading-line", String(row.heading.line));
 
-		const left = document.createElement("div");
+		const left = activeDocument.createElement("div");
 		left.className = "heading-palette__item-left";
 
-		const level = document.createElement("span");
+		const level = activeDocument.createElement("span");
 		level.className = "heading-palette__level";
 		level.textContent = `H${row.heading.level}`;
 
-		const text = document.createElement("span");
+		const text = activeDocument.createElement("span");
 		text.className = "heading-palette__text";
 		text.textContent = row.heading.text;
 
@@ -35,7 +35,7 @@ export function renderResultList(containerEl: HTMLElement, rows: ResultListRow[]
 		item.append(left);
 
 		if (row.quickKeyLabel) {
-			const quickKey = document.createElement("span");
+			const quickKey = activeDocument.createElement("span");
 			quickKey.className = "heading-palette__quick-key";
 			quickKey.textContent = row.quickKeyLabel;
 			item.append(quickKey);
@@ -48,7 +48,7 @@ export function renderResultList(containerEl: HTMLElement, rows: ResultListRow[]
 
 export function renderEmptyState(containerEl: HTMLElement, message: string): void {
 	clearElement(containerEl);
-	const empty = document.createElement("div");
+	const empty = activeDocument.createElement("div");
 	empty.className = "heading-palette__empty";
 	empty.textContent = message;
 	containerEl.append(empty);

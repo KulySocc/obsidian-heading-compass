@@ -45,10 +45,10 @@ export class FloatingOutlineController {
 			return;
 		}
 
-		const root = document.createElement("aside");
+		const root = activeDocument.createElement("aside");
 		root.className = "outline-plus-floating-outline is-hidden";
 
-		const list = document.createElement("ul");
+		const list = activeDocument.createElement("ul");
 		list.className = "outline-plus-floating-outline__list";
 		root.appendChild(list);
 
