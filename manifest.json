@@ -1,7 +1,7 @@
 {
 	"id": "heading-compass",
 	"name": "Heading Compass",
-	"version": "1.0.12",
+	"version": "1.0.13",
 	"minAppVersion": "1.5.7",
 	"description": "Navigate headings in the active note with a fuzzy-search palette and an always-visible floating outline.",
 	"author": "KulySocc",

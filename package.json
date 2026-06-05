@@ -1,6 +1,6 @@
 {
 	"name": "heading-compass",
-	"version": "1.0.12",
+	"version": "1.0.13",
 	"description": "Heading navigation palette and floating outline for Obsidian",
 	"main": "main.js",
 	"type": "module",
