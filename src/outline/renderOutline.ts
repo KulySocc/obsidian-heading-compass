@@ -13,6 +13,22 @@ export interface RenderedOutlineMaps {
 	contextualLinkByHeadingId: Map<string, HTMLAnchorElement>;
 }
 
+const LINK_CLASS = "outline-plus-floating-outline__link";
+const CONTEXTUAL_LINK_CLASS = `${LINK_CLASS} outline-plus-floating-outline__link--contextual`;
+const CONTEXTUAL_LIST_CLASS = "outline-plus-floating-outline__contextual-list";
+const CONTEXTUAL_ITEM_CLASS = "outline-plus-floating-outline__contextual-item";
+const CONTEXTUAL_LIST_SELECTOR = `ul.${CONTEXTUAL_LIST_CLASS}`;
+
+// Heading IDs are slug-derived (parsing/headings.ts), so editing a heading's
+// text churns both its text and its id on every keystroke. Reconciling the
+// existing DOM in place — instead of replaceChildren() — keeps node identity
+// stable across keystrokes, which avoids the teardown/reflow that made the
+// floating outline flicker while typing. Click handlers are bound once per
+// element and read the current heading from this WeakMap so reused links never
+// fire a stale callback.
+type LinkBinding = { heading: ParsedHeading; onClick: (heading: ParsedHeading) => void };
+const linkBindings = new WeakMap<HTMLAnchorElement, LinkBinding>();
+
 export function renderOutline(
 	container: HTMLUListElement,
 	allHeadings: ParsedHeading[],
@@ -26,20 +42,21 @@ export function renderOutline(
 	};
 
 	const headings = filterHeadingsByLevels(allHeadings, enabledLevels);
-	container.replaceChildren();
-
 	if (headings.length === 0) {
+		container.replaceChildren();
 		return maps;
 	}
 
+	const usedNestedLists = new Set<HTMLUListElement>();
+
 	const firstLevel = headings[0]!.level;
-	const levelStack: Array<{ level: number; list: HTMLUListElement; lastItem: HTMLLIElement | null }> = [
-		{ level: firstLevel, list: container, lastItem: null },
-	];
+	type Frame = { level: number; list: HTMLUListElement; cursor: number; lastItem: HTMLLIElement | null };
+	const levelStack: Frame[] = [{ level: firstLevel, list: container, cursor: 0, lastItem: null }];
 
 	for (const heading of headings) {
 		while (levelStack.length > 1 && heading.level < levelStack[levelStack.length - 1]!.level) {
-			levelStack.pop();
+			const popped = levelStack.pop()!;
+			trimListAfter(popped.list, popped.cursor);
 		}
 
 		let target = levelStack[levelStack.length - 1]!;
@@ -51,25 +68,20 @@ export function renderOutline(
 			if (!target.lastItem) {
 				break;
 			}
-			const nestedList = activeDocument.createElement("ul");
-			target.lastItem.appendChild(nestedList);
-			target = { level: target.level + 1, list: nestedList, lastItem: null };
-			levelStack.push(target);
+			const nestedList = reuseOrCreateNestedList(target.lastItem);
+			usedNestedLists.add(nestedList);
+			const frame: Frame = { level: target.level + 1, list: nestedList, cursor: 0, lastItem: null };
+			levelStack.push(frame);
+			target = frame;
 		}
 
-		const li = activeDocument.createElement("li");
-		const link = activeDocument.createElement("a");
-		link.className = "outline-plus-floating-outline__link";
-		link.dataset.headingId = heading.id;
-		link.href = "#";
-		link.textContent = heading.text;
-		link.title = heading.text;
-		link.addEventListener("click", (event) => {
-			event.preventDefault();
-			onHeadingClick(heading);
-		});
+		const li = reuseOrCreateListItem(target.list, target.cursor);
+		target.cursor += 1;
 
-		li.appendChild(link);
+		const link = reuseOrCreateLink(li, LINK_CLASS);
+		updateLink(link, heading);
+		bindLink(link, heading, onHeadingClick);
+
 		maps.linkByHeadingId.set(heading.id, link);
 		maps.nodeByHeadingId.set(heading.id, {
 			heading,
@@ -77,45 +89,148 @@ export function renderOutline(
 			linkEl: link,
 			contextualListEl: null,
 		});
-		target.list.appendChild(li);
+
 		target.lastItem = li;
 	}
 
+	while (levelStack.length > 1) {
+		const popped = levelStack.pop()!;
+		trimListAfter(popped.list, popped.cursor);
+	}
+	trimListAfter(container, levelStack[0]!.cursor);
+
+	removeStaleNestedLists(container, usedNestedLists);
+
 	for (const [, node] of maps.nodeByHeadingId) {
-		const children = getDirectHiddenChildren(node.heading, allHeadings, enabledLevels);
-		if (children.length === 0) {
-			continue;
-		}
-
-		const list = activeDocument.createElement("ul");
-		list.className = "outline-plus-floating-outline__contextual-list";
-		list.setAttribute("aria-hidden", "true");
-
-		for (const child of children) {
-			const item = activeDocument.createElement("li");
-			item.className = "outline-plus-floating-outline__contextual-item";
-
-			const link = activeDocument.createElement("a");
-			link.className = "outline-plus-floating-outline__link outline-plus-floating-outline__link--contextual";
-			link.dataset.headingId = child.id;
-			link.href = "#";
-			link.textContent = child.text;
-			link.title = child.text;
-			link.addEventListener("click", (event) => {
-				event.preventDefault();
-				onHeadingClick(child);
-			});
-
-			item.appendChild(link);
-			list.appendChild(item);
-			maps.contextualLinkByHeadingId.set(child.id, link);
-		}
-
-		node.itemEl.appendChild(list);
-		node.contextualListEl = list;
+		reconcileContextualList(node, allHeadings, enabledLevels, onHeadingClick, maps);
 	}
 
 	return maps;
+}
+
+function reconcileContextualList(
+	node: RenderedOutlineNode,
+	allHeadings: ParsedHeading[],
+	enabledLevels: Set<HeadingLevel>,
+	onHeadingClick: (heading: ParsedHeading) => void,
+	maps: RenderedOutlineMaps,
+): void {
+	const children = getDirectHiddenChildren(node.heading, allHeadings, enabledLevels);
+	const existing = node.itemEl.querySelector<HTMLUListElement>(`:scope > ${CONTEXTUAL_LIST_SELECTOR}`);
+
+	if (children.length === 0) {
+		existing?.remove();
+		node.contextualListEl = null;
+		return;
+	}
+
+	let list = existing;
+	if (!list) {
+		list = activeDocument.createElement("ul");
+		list.className = CONTEXTUAL_LIST_CLASS;
+		list.setAttribute("aria-hidden", "true");
+		node.itemEl.appendChild(list);
+	}
+
+	for (let index = 0; index < children.length; index += 1) {
+		const child = children[index]!;
+		const item = reuseOrCreateContextualItem(list, index);
+		const link = reuseOrCreateLink(item, CONTEXTUAL_LINK_CLASS);
+		updateLink(link, child);
+		bindLink(link, child, onHeadingClick);
+		maps.contextualLinkByHeadingId.set(child.id, link);
+	}
+	trimListAfter(list, children.length);
+
+	node.contextualListEl = list;
+}
+
+function reuseOrCreateNestedList(li: HTMLLIElement): HTMLUListElement {
+	const existing = li.querySelector<HTMLUListElement>(`:scope > ul:not(.${CONTEXTUAL_LIST_CLASS})`);
+	if (existing) {
+		return existing;
+	}
+	const list = activeDocument.createElement("ul");
+	const contextual = li.querySelector<HTMLUListElement>(`:scope > ${CONTEXTUAL_LIST_SELECTOR}`);
+	li.insertBefore(list, contextual);
+	return list;
+}
+
+function reuseOrCreateListItem(list: HTMLUListElement, cursor: number): HTMLLIElement {
+	const candidate = list.children[cursor];
+	if (candidate instanceof HTMLLIElement) {
+		return candidate;
+	}
+	const li = activeDocument.createElement("li");
+	list.insertBefore(li, candidate ?? null);
+	return li;
+}
+
+function reuseOrCreateContextualItem(list: HTMLUListElement, cursor: number): HTMLLIElement {
+	const item = reuseOrCreateListItem(list, cursor);
+	if (item.className !== CONTEXTUAL_ITEM_CLASS) {
+		item.className = CONTEXTUAL_ITEM_CLASS;
+	}
+	return item;
+}
+
+function reuseOrCreateLink(parent: HTMLElement, className: string): HTMLAnchorElement {
+	const first = parent.firstElementChild;
+	if (first instanceof HTMLAnchorElement) {
+		return first;
+	}
+	const link = activeDocument.createElement("a");
+	link.className = className;
+	link.href = "#";
+	parent.insertBefore(link, parent.firstChild);
+	return link;
+}
+
+// Only mutate identity/content here. State classes (is-active, is-expanded …)
+// are owned by the controller and must survive element reuse, so className is
+// never rewritten on an existing link.
+function updateLink(link: HTMLAnchorElement, heading: ParsedHeading): void {
+	if (link.dataset.headingId !== heading.id) {
+		link.dataset.headingId = heading.id;
+	}
+	if (link.textContent !== heading.text) {
+		link.textContent = heading.text;
+	}
+	if (link.title !== heading.text) {
+		link.title = heading.text;
+	}
+}
+
+function bindLink(
+	link: HTMLAnchorElement,
+	heading: ParsedHeading,
+	onClick: (heading: ParsedHeading) => void,
+): void {
+	const alreadyBound = linkBindings.has(link);
+	linkBindings.set(link, { heading, onClick });
+	if (alreadyBound) {
+		return;
+	}
+	link.addEventListener("click", (event) => {
+		event.preventDefault();
+		const binding = linkBindings.get(link);
+		binding?.onClick(binding.heading);
+	});
+}
+
+function trimListAfter(list: HTMLUListElement, cursor: number): void {
+	while (list.children.length > cursor) {
+		list.lastElementChild?.remove();
+	}
+}
+
+function removeStaleNestedLists(container: HTMLUListElement, used: Set<HTMLUListElement>): void {
+	const nestedLists = container.querySelectorAll<HTMLUListElement>(`ul:not(.${CONTEXTUAL_LIST_CLASS})`);
+	nestedLists.forEach((list) => {
+		if (!used.has(list)) {
+			list.remove();
+		}
+	});
 }
 
 function getDirectHiddenChildren(

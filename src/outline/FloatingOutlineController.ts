@@ -131,8 +131,7 @@ export class FloatingOutlineController {
 		}
 
 		const previousActiveHeadingId = this.activeHeadingId;
-		this.expandedHeadingId = null;
-		this.contextualActiveHeadingId = null;
+		const previousExpandedHeadingId = this.expandedHeadingId;
 
 		const onHeadingClick = (heading: ParsedHeading): void => {
 			if (this.activeView) {
@@ -144,6 +143,30 @@ export class FloatingOutlineController {
 		this.linkByHeadingId = maps.linkByHeadingId;
 		this.nodeByHeadingId = maps.nodeByHeadingId;
 		this.contextualLinkByHeadingId = maps.contextualLinkByHeadingId;
+
+		// renderOutline reuses DOM nodes across renders, so color-only state
+		// classes can survive on the wrong element. Scrub them here and let the
+		// subsequent updateActiveHeading() re-apply within the same synchronous
+		// refresh (no paint in between, so no flash).
+		for (const link of this.linkByHeadingId.values()) {
+			link.classList.remove("is-active");
+		}
+		for (const link of this.contextualLinkByHeadingId.values()) {
+			link.classList.remove("is-contextual-active");
+		}
+		this.contextualActiveHeadingId = null;
+
+		// The contextual list element is reused, so its is-expanded state persists.
+		// Keep it when the heading still has a contextual list to avoid a
+		// collapse/re-expand animation while typing; otherwise collapse the stale one.
+		if (previousExpandedHeadingId && this.nodeByHeadingId.get(previousExpandedHeadingId)?.contextualListEl) {
+			this.expandedHeadingId = previousExpandedHeadingId;
+		} else {
+			if (previousExpandedHeadingId) {
+				this.toggleContextualList(previousExpandedHeadingId, false);
+			}
+			this.expandedHeadingId = null;
+		}
 
 		if (this.allHeadings.length === 0) {
 			this.activeHeadingId = null;
